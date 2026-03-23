@@ -1,9 +1,10 @@
-from telegram import Update
+from telegram import Update, constants
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 TOKEN = "7841302947:AAExr0Zedb-suCORKmcy9b-e7HMpNkwUWJQ"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(update.effective_chat.id, constants.ChatAction.TYPING)
     await update.message.reply_text(f"សួស្តី {update.effective_user.first_name}")
 
 app = ApplicationBuilder().token(TOKEN).build()
