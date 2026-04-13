@@ -77,21 +77,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="HTML")
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "📖 <b>របៀបប្រើប្រាស់</b>\n\n"
-        "1️⃣ ផ្ញើរូបភាព (Photo) ណាមួយ\n"
-        "2️⃣ ខ្ញុំ upload ឡើង image hosting\n"
-        "3️⃣ ខ្ញុំផ្ញើ link មកវិញ\n"
-        "4️⃣ Copy link ហើយចែករំលែកបាន!\n\n"
-        "✅ Link ដែលបាន អាចបង្ហាញ <b>preview</b> "
-        "ពេល paste នៅក្នុង Telegram chat.\n\n"
-        "🔑 <b>Permanent links:</b> Set <code>IMGBB_API_KEY</code> "
-        "ក្នុង Secrets (ចុះឈ្មោះឥតគិតថ្លៃនៅ imgbb.com)\n\n"
-        "⚠️ <b>ចំណាំ:</b> ផ្ញើជា Photo ឬ Image file ក៏បាន។"
-    )
-    await update.message.reply_text(text, parse_mode="HTML")
-
 
 async def send_result(update: Update, result: dict, file_id: str, is_photo: bool):
     url = result["url"]
@@ -143,15 +128,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📸 សូមផ្ញើ <b>រូបភាព</b>មកខ្ញុំ!\n"
-        "ឬប្រើ /help ដើម្បីមើលការណែនាំ។",
+        "📸 សូមផ្ញើ <b>រូបភាព</b>មកខ្ញុំ!",
         parse_mode="HTML",
     )
 
 
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.Document.IMAGE, handle_document))
 app.add_handler(MessageHandler(filters.ALL, unknown))
