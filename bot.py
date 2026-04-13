@@ -2,7 +2,7 @@ import os
 import io
 import base64
 import httpx
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -95,41 +95,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_result(update: Update, result: dict, file_id: str, is_photo: bool):
     url = result["url"]
-    service = result["service"]
-    expiry = result["expiry"]
-    delete_url = result.get("delete_url", "")
-
-    keyboard_buttons = [[InlineKeyboardButton("🔗 បើក Link", url=url)]]
-    if delete_url:
-        keyboard_buttons.append(
-            [InlineKeyboardButton("🗑 លុប រូបភាព", url=delete_url)]
-        )
-    keyboard = InlineKeyboardMarkup(keyboard_buttons)
-
-    caption = (
-        f"✅ <b>Upload រួចរាល់!</b>\n\n"
-        f"🔗 <b>Link:</b>\n"
-        f"<code>{url}</code>\n\n"
-        f"🗄 <b>Service:</b> {service}\n"
-        f"⏱ <b>រយៈពេល:</b> {expiry}\n\n"
-        f"📋 Copy link ខាងលើ ហើយ paste នៅក្នុង "
-        f"Telegram chat — preview នឹងបង្ហាញដោយស្វ័យប្រវត្តិ!"
-    )
-
-    if is_photo:
-        await update.message.reply_photo(
-            photo=file_id,
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-    else:
-        await update.message.reply_document(
-            document=file_id,
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
+    await update.message.reply_text(url)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
