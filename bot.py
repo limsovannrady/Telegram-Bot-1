@@ -1,5 +1,6 @@
 import os
 import io
+import base64
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,16 +12,66 @@ from telegram.ext import (
 )
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY", "")
 
-TELEGRAPH_UPLOAD_URL = "https://telegra.ph/upload"
+IMGBB_URL = "https://api.imgbb.com/1/upload"
+LITTERBOX_URL = "https://litterbox.catbox.moe/resources/internals/api.php"
+
+
+async def upload_image(image_bytes: bytes, filename: str, mime: str) -> dict:
+    """Upload image and return dict with url, delete_url, expiry info."""
+
+    # Try imgbb if API key is set (permanent links)
+    if IMGBB_API_KEY:
+        b64 = base64.b64encode(image_bytes).decode()
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                IMGBB_URL,
+                params={"key": IMGBB_API_KEY},
+                data={"image": b64, "name": filename},
+            )
+            if r.status_code == 200:
+                data = r.json().get("data", {})
+                return {
+                    "url": data.get("url", ""),
+                    "display_url": data.get("display_url", data.get("url", "")),
+                    "delete_url": data.get("delete_url", ""),
+                    "service": "ImgBB",
+                    "expiry": "ជារៀងរហូត (permanent)",
+                }
+
+    # Fallback: litterbox (72 hours)
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            LITTERBOX_URL,
+            data={"reqtype": "fileupload", "time": "72h"},
+            files={"fileToUpload": (filename, image_bytes, mime)},
+        )
+        r.raise_for_status()
+        url = r.text.strip()
+        if url.startswith("https://"):
+            return {
+                "url": url,
+                "display_url": url,
+                "delete_url": "",
+                "service": "Litterbox",
+                "expiry": "72 ម៉ោង (បន្ទាប់មក link នឹងផុតកំណត់)",
+            }
+        raise ValueError(f"Unexpected response: {url}")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    service_info = (
+        "🔑 <b>ImgBB</b> (link ជារៀងរហូត)"
+        if IMGBB_API_KEY
+        else "📦 <b>Litterbox</b> (link រយៈពេល 72 ម៉ោង)\n\n"
+        "💡 <i>ចង់បាន permanent link? Set <code>IMGBB_API_KEY</code> ក្នុង Secrets!</i>"
+    )
     text = (
         "👋 សួស្តី! ខ្ញុំជា <b>Image Link Bot</b>\n\n"
-        "📤 ផ្ញើរូបភាពមកខ្ញុំ រួចខ្ញុំនឹងបង្ហូររូបភាពនោះ "
-        "ឡើងទៅ <b>Telegraph</b> ហើយបញ្ជូន link មកវិញ។\n\n"
-        "🔗 Link នោះអាចបង្ហាញ <b>preview</b> បាននៅក្នុង Telegram!\n\n"
+        "📤 ផ្ញើរូបភាពមកខ្ញុំ ខ្ញុំនឹង upload ហើយបញ្ជូន link "
+        "ដែលបង្ហាញ <b>preview</b> នៅក្នុង Telegram!\n\n"
+        f"🗄 <b>Service:</b> {service_info}\n\n"
         "📸 <i>ចុះផ្ញើរូបភាពសាកល្បងមើល...</i>"
     )
     await update.message.reply_text(text, parse_mode="HTML")
@@ -29,72 +80,71 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "📖 <b>របៀបប្រើប្រាស់</b>\n\n"
-        "1️⃣ ផ្ញើរូបភាព (Photo) ណាមួយមកខ្ញុំ\n"
-        "2️⃣ ខ្ញុំនឹង upload ឡើង Telegraph\n"
+        "1️⃣ ផ្ញើរូបភាព (Photo) ណាមួយ\n"
+        "2️⃣ ខ្ញុំ upload ឡើង image hosting\n"
         "3️⃣ ខ្ញុំផ្ញើ link មកវិញ\n"
         "4️⃣ Copy link ហើយចែករំលែកបាន!\n\n"
-        "✅ Link ដែលបានមក អាចបង្ហាញ preview "
+        "✅ Link ដែលបាន អាចបង្ហាញ <b>preview</b> "
         "ពេល paste នៅក្នុង Telegram chat.\n\n"
-        "⚠️ <b>ចំណាំ:</b> ផ្ញើជា Photo (មិនមែន File) ដើម្បីឱ្យល្អបំផុត។"
+        "🔑 <b>Permanent links:</b> Set <code>IMGBB_API_KEY</code> "
+        "ក្នុង Secrets (ចុះឈ្មោះឥតគិតថ្លៃនៅ imgbb.com)\n\n"
+        "⚠️ <b>ចំណាំ:</b> ផ្ញើជា Photo ឬ Image file ក៏បាន។"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
 
+async def send_result(update: Update, result: dict, file_id: str, is_photo: bool):
+    url = result["url"]
+    service = result["service"]
+    expiry = result["expiry"]
+    delete_url = result.get("delete_url", "")
+
+    keyboard_buttons = [[InlineKeyboardButton("🔗 បើក Link", url=url)]]
+    if delete_url:
+        keyboard_buttons.append(
+            [InlineKeyboardButton("🗑 លុប រូបភាព", url=delete_url)]
+        )
+    keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+    caption = (
+        f"✅ <b>Upload រួចរាល់!</b>\n\n"
+        f"🔗 <b>Link:</b>\n"
+        f"<code>{url}</code>\n\n"
+        f"🗄 <b>Service:</b> {service}\n"
+        f"⏱ <b>រយៈពេល:</b> {expiry}\n\n"
+        f"📋 Copy link ខាងលើ ហើយ paste នៅក្នុង "
+        f"Telegram chat — preview នឹងបង្ហាញដោយស្វ័យប្រវត្តិ!"
+    )
+
+    if is_photo:
+        await update.message.reply_photo(
+            photo=file_id,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    else:
+        await update.message.reply_document(
+            document=file_id,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⏳ កំពុង upload រូបភាព...")
+    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...")
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-
-    file_bytes = await file.download_as_bytearray()
-
-    file_obj = io.BytesIO(bytes(file_bytes))
-    file_obj.name = "image.jpg"
+    file_bytes = bytes(await file.download_as_bytearray())
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TELEGRAPH_UPLOAD_URL,
-                files={"file": ("image.jpg", file_obj, "image/jpeg")},
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        if isinstance(data, list) and len(data) > 0 and "src" in data[0]:
-            src = data[0]["src"]
-            image_url = f"https://telegra.ph{src}"
-
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔗 បើក Link", url=image_url)]]
-            )
-
-            caption = (
-                f"✅ <b>Upload រួចរាល់!</b>\n\n"
-                f"🔗 <b>Link:</b>\n"
-                f"<code>{image_url}</code>\n\n"
-                f"📋 Copy link ខាងលើ ហើយ paste "
-                f"នៅក្នុង chat ណាក៏បាន — Telegram នឹងបង្ហាញ preview ដោយស្វ័យប្រវត្តិ!"
-            )
-
-            await update.message.reply_photo(
-                photo=photo.file_id,
-                caption=caption,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-        else:
-            await update.message.reply_text(
-                "❌ Upload បរាជ័យ។ សូមព្យាយាមម្តងទៀត។"
-            )
-
-    except httpx.HTTPStatusError as e:
-        await update.message.reply_text(
-            f"❌ Server error: {e.response.status_code}\nសូមព្យាយាមម្តងទៀត។"
-        )
+        result = await upload_image(file_bytes, "photo.jpg", "image/jpeg")
+        await msg.delete()
+        await send_result(update, result, photo.file_id, is_photo=True)
     except Exception as e:
-        await update.message.reply_text(
-            f"❌ មានបញ្ហាកើតឡើង: {str(e)}\nសូមព្យាយាមម្តងទៀត។"
-        )
+        await msg.edit_text(f"❌ Upload បរាជ័យ: {str(e)}\nសូមព្យាយាមម្តងទៀត។")
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -103,67 +153,31 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not mime.startswith("image/"):
         await update.message.reply_text(
-            "⚠️ ខ្ញុំអាចដំណើរការបានតែរូបភាពប៉ុណ្ណោះ។\n"
-            "សូមផ្ញើ <b>Photo</b> (មិនមែន File)។",
+            "⚠️ ខ្ញុំអាចដំណើរការបានតែ <b>រូបភាព</b>ប៉ុណ្ណោះ។\n"
+            "សូមផ្ញើ Photo ឬ Image file។",
             parse_mode="HTML",
         )
         return
 
-    await update.message.reply_text("⏳ កំពុង upload រូបភាព (as file)...")
+    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...")
 
     file = await context.bot.get_file(doc.file_id)
-    file_bytes = await file.download_as_bytearray()
+    file_bytes = bytes(await file.download_as_bytearray())
 
     ext = mime.split("/")[-1]
     filename = f"image.{ext}"
-    file_obj = io.BytesIO(bytes(file_bytes))
-    file_obj.name = filename
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TELEGRAPH_UPLOAD_URL,
-                files={"file": (filename, file_obj, mime)},
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        if isinstance(data, list) and len(data) > 0 and "src" in data[0]:
-            src = data[0]["src"]
-            image_url = f"https://telegra.ph{src}"
-
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔗 បើក Link", url=image_url)]]
-            )
-
-            caption = (
-                f"✅ <b>Upload រួចរាល់!</b>\n\n"
-                f"🔗 <b>Link:</b>\n"
-                f"<code>{image_url}</code>\n\n"
-                f"📋 Copy link ខាងលើ ហើយ paste "
-                f"នៅក្នុង chat ណាក៏បាន — Telegram នឹងបង្ហាញ preview ដោយស្វ័យប្រវត្តិ!"
-            )
-
-            await update.message.reply_document(
-                document=doc.file_id,
-                caption=caption,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-        else:
-            await update.message.reply_text(
-                "❌ Upload បរាជ័យ។ សូមព្យាយាមម្តងទៀត។"
-            )
-
+        result = await upload_image(file_bytes, filename, mime)
+        await msg.delete()
+        await send_result(update, result, doc.file_id, is_photo=False)
     except Exception as e:
-        await update.message.reply_text(
-            f"❌ មានបញ្ហាកើតឡើង: {str(e)}\nសូមព្យាយាមម្តងទៀត។"
-        )
+        await msg.edit_text(f"❌ Upload បរាជ័យ: {str(e)}\nសូមព្យាយាមម្តងទៀត។")
 
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📸 សូមផ្ញើ<b>រូបភាព</b>មកខ្ញុំ!\n"
+        "📸 សូមផ្ញើ <b>រូបភាព</b>មកខ្ញុំ!\n"
         "ឬប្រើ /help ដើម្បីមើលការណែនាំ។",
         parse_mode="HTML",
     )
