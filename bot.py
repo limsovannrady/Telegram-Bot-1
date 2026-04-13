@@ -80,11 +80,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_result(update: Update, result: dict, file_id: str, is_photo: bool):
     url = result["url"]
-    await update.message.reply_text(url)
+    await update.message.reply_text(url, do_quote=True)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...")
+    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...", do_quote=True)
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
@@ -110,7 +110,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...")
+    msg = await update.message.reply_text("⏳ កំពុង upload រូបភាព...", do_quote=True)
 
     file = await context.bot.get_file(doc.file_id)
     file_bytes = bytes(await file.download_as_bytearray())
