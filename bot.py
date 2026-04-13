@@ -133,9 +133,14 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-app.add_handler(MessageHandler(filters.Document.IMAGE, handle_document))
-app.add_handler(MessageHandler(filters.ALL, unknown))
-app.run_polling()
+def build_app():
+    application = ApplicationBuilder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    application.add_handler(MessageHandler(filters.Document.IMAGE, handle_document))
+    application.add_handler(MessageHandler(filters.ALL, unknown))
+    return application
+
+
+if __name__ == "__main__":
+    build_app().run_polling()

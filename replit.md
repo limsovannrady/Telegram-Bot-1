@@ -2,37 +2,58 @@
 
 ## Overview
 
-Telegram bot ដែលទទួលរូបភាព ហើយ upload ទៅ Telegraph (telegra.ph) ដើម្បីបង្ហូរ link ជាមួយ preview។
+Telegram bot ដែលទទួលរូបភាព ហើយ upload ទៅ ImgBB ឬ Litterbox ដើម្បីបង្ហូរ link ជាមួយ preview។ Bot គាំទ្រ webhook mode សម្រាប់ deploy នៅលើ Vercel។
 
 ## Stack
 
-- **Language**: Python 3.11
+- **Language**: Python 3.12
 - **Bot Framework**: python-telegram-bot >= 22.7
 - **HTTP Client**: httpx >= 0.27.0
-- **Image Hosting**: Telegraph (telegra.ph/upload)
+- **Image Hosting**: ImgBB (permanent) / Litterbox (72h fallback)
+- **Deployment**: Vercel (webhook) / local (polling)
+
+## Project Structure
+
+```
+bot.py              # Core bot logic + handlers (importable)
+api/
+  webhook.py        # Vercel serverless — POST /api/webhook (Telegram)
+  ping.py           # Vercel serverless — HEAD/GET /api/ping (UptimeRobot)
+vercel.json         # Vercel runtime config (python3.12)
+requirements.txt    # Python dependencies for Vercel
+pyproject.toml      # Local dev dependencies (uv)
+```
 
 ## Features
 
 - `/start` — ស្វាគមន៍ user និងណែនាំ
-- `/help` — បង្ហាញការណែនាំការប្រើប្រាស់
-- Photo message → upload to Telegraph → return link with preview
-- Document (image) message → upload to Telegraph → return link with preview
+- Photo message → upload → return public link
+- Document (image) message → upload → return public link
 - Unknown message → redirect user to send photo
-
-## How it works
-
-1. User ផ្ញើ Photo ឬ Image file
-2. Bot download file ពី Telegram servers
-3. Bot upload ទៅ `https://telegra.ph/upload`
-4. Telegraph ត្រឡប់ path `/file/xxx.jpg`
-5. Bot ផ្ញើ `https://telegra.ph/file/xxx.jpg` link មកវិញ
-6. Link នោះ auto-preview នៅក្នុង Telegram chats
 
 ## Environment Variables
 
-- `TELEGRAM_BOT_TOKEN` — Bot token ពី @BotFather
+- `TELEGRAM_BOT_TOKEN` — Bot token ពី @BotFather (required)
+- `IMGBB_API_KEY` — ImgBB API key សម្រាប់ permanent links (optional)
 
-## Running
+## Deploy on Vercel
+
+1. Push code ទៅ GitHub
+2. Import project ចូល Vercel
+3. Add environment variables: `TELEGRAM_BOT_TOKEN`, `IMGBB_API_KEY`
+4. Deploy — Vercel domain នឹងជា `https://<your-domain>`
+5. Set webhook:
+   ```
+   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-domain>/api/webhook
+   ```
+
+## UptimeRobot Ping
+
+- URL: `https://<your-domain>/api/ping`
+- Monitor type: **HTTP(s)** with **HEAD** request
+- Expected status: `200 OK`
+
+## Local Development (Polling)
 
 ```bash
 python3 bot.py
